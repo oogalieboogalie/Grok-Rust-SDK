@@ -21,7 +21,7 @@ impl ToolExecutor for CalculatorTool {
             grok_rust_sdk::GrokError::ToolExecution("Missing expression".to_string())
         })?;
 
-                // Simple calculator (in production, use a proper math library)
+        // Simple calculator (in production, use a proper math library)
         let result = match expression {
             "2+2" => 4.0,
             "15*7" => 105.0,
@@ -31,14 +31,16 @@ impl ToolExecutor for CalculatorTool {
                 // For other expressions, try basic parsing
                 if let Some(pos) = expression.find('+') {
                     let a: f64 = expression[..pos].trim().parse().unwrap_or(0.0);
-                    let b: f64 = expression[pos+1..].trim().parse().unwrap_or(0.0);
+                    let b: f64 = expression[pos + 1..].trim().parse().unwrap_or(0.0);
                     a + b
                 } else if let Some(pos) = expression.find('*') {
                     let a: f64 = expression[..pos].trim().parse().unwrap_or(0.0);
-                    let b: f64 = expression[pos+1..].trim().parse().unwrap_or(0.0);
+                    let b: f64 = expression[pos + 1..].trim().parse().unwrap_or(0.0);
                     a * b
                 } else {
-                    return Err(grok_rust_sdk::GrokError::ToolExecution("Unsupported expression".to_string()));
+                    return Err(grok_rust_sdk::GrokError::ToolExecution(
+                        "Unsupported expression".to_string(),
+                    ));
                 }
             }
         };
