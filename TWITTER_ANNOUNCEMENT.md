@@ -15,7 +15,7 @@ One of the first complete Rust SDKs for Grok's advanced features! Early access t
 
 #Rust #Grok #xAI #RustLang #AI
 
-GitHub: https://github.com/oogalieboogalie/grok-rust-sdk
+GitHub: https://github.com/oogalieboogalie/Grok-Rust-SDK
 ```
 
 ## 🧵 Thread Follow-ups
