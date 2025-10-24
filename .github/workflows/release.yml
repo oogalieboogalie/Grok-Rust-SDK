@@ -1,0 +1,68 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+
+    - name: Run tests
+      run: cargo test --verbose
+
+    - name: Publish to crates.io
+      run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }}
+      env:
+        CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+
+  github-release:
+    runs-on: ubuntu-latest
+    needs: publish
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Generate changelog
+      run: |
+        # Extract version from tag
+        VERSION=${GITHUB_REF#refs/tags/v}
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+    - name: Create GitHub release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ env.VERSION }}
+        body: |
+          ## What's Changed
+
+          See the [changelog](https://github.com/oogalieboogalie/Grok-Rust-SDK/blob/main/CHANGELOG.md) for details.
+
+          ## Installation
+
+          ```bash
+          cargo add grok-rust-sdk
+          ```
+
+          ## Documentation
+
+          - [API Docs](https://docs.rs/grok-rust-sdk)
+          - [Repository](https://github.com/oogalieboogalie/Grok-Rust-SDK)
+        draft: false
+        prerelease: false
