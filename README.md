@@ -15,6 +15,9 @@ A Rust SDK for xAI's Grok API with chat completions, tool calling, and session m
 - **Tool Calling** - Function calling with execution
 - **Sessions** - Persistent conversations
 - **Collections** - Organize conversation groups
+- **Streaming** - Real-time response streaming
+- **Persistence** - SQLite storage for sessions and collections
+- **Validation** - JSON Schema validation for tool arguments
 - **Async/Await** - Built with tokio
 - **Type Safe** - Comprehensive error handling
 
@@ -45,6 +48,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🤖 {}", response.message.content);
     Ok(())
 }
+```
+
+## ⚙️ Advanced Configuration
+
+Use the builder pattern for custom timeouts, user agents, and request IDs:
+
+```rust
+use grok_rust_sdk::Client;
+use std::time::Duration;
+
+let client = Client::builder()
+    .api_key("your-xai-api-key")
+    .timeout(Duration::from_secs(30))
+    .user_agent("MyApp/1.0")
+    .request_id("req-12345")
+    .build()?;
 ```
 
 ## 🛠️ Tool Calling
@@ -88,6 +107,29 @@ let session = session_mgr.create_session(grok_rust_sdk::Model::Grok4FastReasonin
 // Chat with context
 session.chat("What's 2+2?").await?;
 session.chat("Now multiply by 3").await?; // Context preserved
+```
+
+## 💾 Persistence
+
+Store sessions and collections in SQLite for long-term persistence:
+
+```rust
+use grok_rust_sdk::persistence::SqliteStorage;
+
+// Create persistent storage
+let storage = SqliteStorage::new("chat.db")?;
+
+// Save sessions and collections
+storage.save_session(&session).await?;
+storage.save_collection(&collection).await?;
+
+// Load them back later
+if let Some(session) = storage.load_session("session-id").await? {
+    // Continue the conversation
+}
+```
+
+## 🛠️ Tool Calling
 ```
 
 ## 📦 Installation

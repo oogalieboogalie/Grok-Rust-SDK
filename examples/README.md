@@ -20,6 +20,9 @@ cargo run --example basic_chat
 cargo run --example tool_calling
 cargo run --example sessions
 cargo run --example collections
+cargo run --example client_builder
+cargo run --example streaming
+cargo run --example persistence
 ```
 
 ## Examples Overview
@@ -35,3 +38,15 @@ Shows session management for multi-turn conversations.
 
 ### `collections.rs`
 Organizing conversations into searchable collections.
+
+### `client_builder.rs`
+Advanced client configuration using the builder pattern.
+
+### `streaming.rs`
+Streaming chat completions for real-time responses.
+
+### `persistence.rs`
+Persistent storage of sessions and collections using SQLite.
+
+### `client_builder.rs`
+Advanced client configuration using the builder pattern for timeouts, user agents, and request IDs.

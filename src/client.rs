@@ -1,12 +1,13 @@
 //! Main client for interacting with the Grok API
 
-use crate::chat::{ChatCompletion, ChatRequest, ChatResponse, Message, Model, Tool};
+use crate::chat::{ChatCompletion, ChatRequest, ChatResponse, Message, Model, Tool, ChatChunk};
 use crate::collections::CollectionManager;
 use crate::error::{GrokError, Result};
 use crate::session::SessionManager;
 use reqwest::{Client as HttpClient, Response};
 use serde::de::DeserializeOwned;
 use std::sync::Arc;
+use std::time::Duration;
 
 /// Main client for the Grok API
 #[derive(Debug)]
@@ -14,6 +15,9 @@ pub struct Client {
     http_client: HttpClient,
     api_key: String,
     base_url: String,
+    timeout: Option<Duration>,
+    user_agent: Option<String>,
+    request_id: Option<String>,
 }
 
 impl Client {
@@ -23,6 +27,9 @@ impl Client {
             http_client: HttpClient::new(),
             api_key: api_key.into(),
             base_url: "https://api.x.ai/v1".to_string(),
+            timeout: None,
+            user_agent: None,
+            request_id: None,
         })
     }
 
@@ -32,7 +39,15 @@ impl Client {
             http_client: HttpClient::new(),
             api_key: api_key.into(),
             base_url: base_url.into(),
+            timeout: None,
+            user_agent: None,
+            request_id: None,
         })
+    }
+
+    /// Create a builder for advanced configuration
+    pub fn builder() -> ClientBuilder {
+        ClientBuilder::new()
     }
 
     /// Create a session manager for this client
@@ -105,10 +120,10 @@ impl Client {
         model: Model,
         messages: Vec<Message>,
         tools: Option<Vec<Tool>>,
-    ) -> Result<impl futures::Stream<Item = Result<crate::chat::ChatChunk>>> {
+    ) -> Result<impl futures::Stream<Item = Result<ChatChunk>>> {
         use futures::StreamExt;
 
-        let mut request = ChatRequest {
+        let request = ChatRequest {
             model: model.as_str().to_string(),
             messages,
             max_tokens: None,
@@ -121,14 +136,17 @@ impl Client {
             stream: Some(true),
         };
 
-        let response = self
+        let mut request_builder = self
             .http_client
             .post(&format!("{}/chat/completions", self.base_url))
             .header("Authorization", format!("Bearer {}", self.api_key))
-            .header("Content-Type", "application/json")
-            .json(&request)
-            .send()
-            .await?;
+            .header("Content-Type", "application/json");
+
+        if let Some(ref request_id) = self.request_id {
+            request_builder = request_builder.header("X-Request-ID", request_id);
+        }
+
+        let response = request_builder.json(&request).send().await?;
 
         if !response.status().is_success() {
             let status = response.status().as_u16();
@@ -136,39 +154,26 @@ impl Client {
             return Err(GrokError::Api { status, message });
         }
 
-        let stream = response
-            .bytes_stream()
-            .map(|result| match result {
-                Ok(bytes) => {
-                    // Parse SSE format
-                    let text = String::from_utf8_lossy(&bytes);
-                    let lines: Vec<&str> = text.lines().collect();
+        // Collect all response data
+        let body_bytes = response.bytes().await.map_err(GrokError::Http)?;
+        let body_text = String::from_utf8_lossy(&body_bytes);
 
-                    for line in lines {
-                        if line.starts_with("data: ") {
-                            let data = &line[6..];
-                            if data == "[DONE]" {
-                                return Ok(None);
-                            }
-
-                            match serde_json::from_str::<crate::chat::ChatChunk>(data) {
-                                Ok(chunk) => return Ok(Some(chunk)),
-                                Err(e) => return Err(GrokError::Json(e)),
-                            }
-                        }
-                    }
-
-                    Ok(None)
+        // Parse SSE format and collect chunks
+        let mut chunks = Vec::new();
+        for line in body_text.lines() {
+            if line.starts_with("data: ") {
+                let data = &line[6..];
+                if data == "[DONE]" {
+                    break;
                 }
-                Err(e) => Err(GrokError::Http(e)),
-            })
-            .filter_map(|result| async move {
-                match result {
-                    Ok(Some(chunk)) => Some(Ok(chunk)),
-                    Ok(None) => None,
-                    Err(e) => Some(Err(e)),
+                if let Ok(chunk) = serde_json::from_str::<ChatChunk>(data) {
+                    chunks.push(chunk);
                 }
-            });
+            }
+        }
+
+        // Convert to stream
+        let stream = futures::stream::iter(chunks.into_iter().map(Ok));
 
         Ok(stream)
     }
@@ -180,14 +185,17 @@ impl Client {
         body: &T,
     ) -> Result<R> {
         let url = format!("{}{}", self.base_url, endpoint);
-        let response = self
+        let mut request = self
             .http_client
             .post(&url)
             .header("Authorization", format!("Bearer {}", self.api_key))
-            .header("Content-Type", "application/json")
-            .json(body)
-            .send()
-            .await?;
+            .header("Content-Type", "application/json");
+
+        if let Some(ref request_id) = self.request_id {
+            request = request.header("X-Request-ID", request_id);
+        }
+
+        let response = request.json(body).send().await?;
 
         self.handle_response(response).await
     }
@@ -210,6 +218,9 @@ impl Clone for Client {
             http_client: HttpClient::new(),
             api_key: self.api_key.clone(),
             base_url: self.base_url.clone(),
+            timeout: self.timeout,
+            user_agent: self.user_agent.clone(),
+            request_id: self.request_id.clone(),
         }
     }
 }
@@ -231,4 +242,84 @@ pub struct ChatOptions {
     pub stop: Option<Vec<String>>,
     /// Enable streaming responses
     pub stream: Option<bool>,
+}
+
+/// Builder for creating a Client with custom configuration
+#[derive(Debug, Clone)]
+pub struct ClientBuilder {
+    api_key: Option<String>,
+    base_url: Option<String>,
+    timeout: Option<Duration>,
+    user_agent: Option<String>,
+    request_id: Option<String>,
+}
+
+impl ClientBuilder {
+    /// Create a new builder
+    pub fn new() -> Self {
+        Self {
+            api_key: None,
+            base_url: None,
+            timeout: None,
+            user_agent: None,
+            request_id: None,
+        }
+    }
+
+    /// Set the API key
+    pub fn api_key(mut self, api_key: impl Into<String>) -> Self {
+        self.api_key = Some(api_key.into());
+        self
+    }
+
+    /// Set the base URL
+    pub fn base_url(mut self, base_url: impl Into<String>) -> Self {
+        self.base_url = Some(base_url.into());
+        self
+    }
+
+    /// Set the request timeout
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
+        self
+    }
+
+    /// Set the user agent
+    pub fn user_agent(mut self, user_agent: impl Into<String>) -> Self {
+        self.user_agent = Some(user_agent.into());
+        self
+    }
+
+    /// Set a custom request ID
+    pub fn request_id(mut self, request_id: impl Into<String>) -> Self {
+        self.request_id = Some(request_id.into());
+        self
+    }
+
+    /// Build the client
+    pub fn build(self) -> Result<Client> {
+        let api_key = self.api_key.ok_or_else(|| GrokError::InvalidConfig("API key is required".to_string()))?;
+        let base_url = self.base_url.unwrap_or_else(|| "https://api.x.ai/v1".to_string());
+
+        let mut http_client_builder = HttpClient::builder();
+
+        if let Some(timeout) = self.timeout {
+            http_client_builder = http_client_builder.timeout(timeout);
+        }
+
+        if let Some(user_agent) = self.user_agent {
+            http_client_builder = http_client_builder.user_agent(user_agent);
+        }
+
+        let http_client = http_client_builder.build().map_err(GrokError::Http)?;
+
+        Ok(Client {
+            http_client,
+            api_key,
+            base_url,
+            timeout: self.timeout,
+            user_agent: self.user_agent,
+            request_id: self.request_id,
+        })
+    }
 }

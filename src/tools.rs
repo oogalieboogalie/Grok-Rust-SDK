@@ -129,6 +129,19 @@ impl ToolRegistry {
         let args: serde_json::Value = serde_json::from_str(&tool_call.function.arguments)
             .map_err(|e| GrokError::ToolExecution(format!("Invalid tool arguments: {}", e)))?;
 
+        // Validate arguments against the tool's parameter schema
+        let spec = executor.spec();
+        let schema = jsonschema::JSONSchema::compile(&spec.parameters)
+            .map_err(|e| GrokError::ToolExecution(format!("Invalid parameter schema: {}", e)))?;
+
+        if let Err(errors) = schema.validate(&args) {
+            let error_messages: Vec<String> = errors.map(|e| e.to_string()).collect();
+            return Err(GrokError::ToolExecution(format!(
+                "Tool arguments validation failed: {}",
+                error_messages.join(", ")
+            )));
+        }
+
         let result = executor
             .execute(args)
             .await

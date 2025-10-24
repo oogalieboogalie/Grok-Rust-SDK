@@ -34,6 +34,7 @@ pub mod chat;
 pub mod client;
 pub mod collections;
 pub mod error;
+pub mod persistence;
 pub mod session;
 pub mod tools;
 
