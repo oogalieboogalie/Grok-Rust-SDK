@@ -2,6 +2,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/grok-rust-sdk.svg)](https://crates.io/crates/grok-rust-sdk)
 [![Documentation](https://docs.rs/grok-rust-sdk/badge.svg)](https://docs.rs/grok-rust-sdk)
+[![CI](https://github.com/oogalieboogalie/Grok-Rust-SDK/actions/workflows/ci.yml/badge.svg)](https://github.com/oogalieboogalie/Grok-Rust-SDK/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A Rust SDK for xAI's Grok API with chat completions, tool calling, and session management.
