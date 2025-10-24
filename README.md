@@ -18,6 +18,7 @@ A Rust SDK for xAI's Grok API with chat completions, tool calling, and session m
 - **Streaming** - Real-time response streaming
 - **Persistence** - SQLite storage for sessions and collections
 - **Validation** - JSON Schema validation for tool arguments
+- **Retry Logic** - Exponential backoff for rate limits and errors
 - **Async/Await** - Built with tokio
 - **Type Safe** - Comprehensive error handling
 
@@ -129,7 +130,22 @@ if let Some(session) = storage.load_session("session-id").await? {
 }
 ```
 
-## 🛠️ Tool Calling
+## � Retry Logic
+
+Automatic retry with exponential backoff for rate limits and network errors:
+
+```rust
+let client = Client::builder()
+    .api_key("your-api-key")
+    .max_retries(5)  // Retry up to 5 times on 429/5xx errors
+    .retry_delay(Duration::from_millis(500))  // Start with 500ms delay
+    .build()?;
+
+// Automatically handles rate limits and retries
+let response = client.chat(model, messages, tools).await?;
+```
+
+## �🛠️ Tool Calling
 ```
 
 ## 📦 Installation

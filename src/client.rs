@@ -18,6 +18,8 @@ pub struct Client {
     timeout: Option<Duration>,
     user_agent: Option<String>,
     request_id: Option<String>,
+    max_retries: u32,
+    retry_delay: Duration,
 }
 
 impl Client {
@@ -30,6 +32,8 @@ impl Client {
             timeout: None,
             user_agent: None,
             request_id: None,
+            max_retries: 3,
+            retry_delay: Duration::from_millis(1000),
         })
     }
 
@@ -42,6 +46,8 @@ impl Client {
             timeout: None,
             user_agent: None,
             request_id: None,
+            max_retries: 3,
+            retry_delay: Duration::from_millis(1000),
         })
     }
 
@@ -184,20 +190,40 @@ impl Client {
         endpoint: &str,
         body: &T,
     ) -> Result<R> {
+        use backon::ExponentialBuilder;
+        use backon::Retryable;
+
         let url = format!("{}{}", self.base_url, endpoint);
-        let mut request = self
-            .http_client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", self.api_key))
-            .header("Content-Type", "application/json");
 
-        if let Some(ref request_id) = self.request_id {
-            request = request.header("X-Request-ID", request_id);
-        }
+        let operation = || async {
+            let mut request = self
+                .http_client
+                .post(&url)
+                .header("Authorization", format!("Bearer {}", self.api_key))
+                .header("Content-Type", "application/json");
 
-        let response = request.json(body).send().await?;
+            if let Some(ref request_id) = self.request_id {
+                request = request.header("X-Request-ID", request_id);
+            }
 
-        self.handle_response(response).await
+            let response = request.json(body).send().await?;
+            self.handle_response(response).await
+        };
+
+        // Retry on 429 (rate limit) and 5xx errors
+        let backoff = ExponentialBuilder::default()
+            .with_min_delay(self.retry_delay)
+            .with_max_delay(Duration::from_secs(60))
+            .with_max_times(self.max_retries);
+
+        operation
+            .retry(backoff)
+            .when(|e: &GrokError| match e {
+                GrokError::Api { status, .. } => *status == 429 || *status >= 500,
+                GrokError::Http(_) => true, // Retry on network errors
+                _ => false,
+            })
+            .await
     }
 
     /// Handle API response
@@ -221,6 +247,8 @@ impl Clone for Client {
             timeout: self.timeout,
             user_agent: self.user_agent.clone(),
             request_id: self.request_id.clone(),
+            max_retries: self.max_retries,
+            retry_delay: self.retry_delay,
         }
     }
 }
@@ -252,6 +280,8 @@ pub struct ClientBuilder {
     timeout: Option<Duration>,
     user_agent: Option<String>,
     request_id: Option<String>,
+    max_retries: Option<u32>,
+    retry_delay: Option<Duration>,
 }
 
 impl ClientBuilder {
@@ -263,6 +293,8 @@ impl ClientBuilder {
             timeout: None,
             user_agent: None,
             request_id: None,
+            max_retries: None,
+            retry_delay: None,
         }
     }
 
@@ -296,6 +328,18 @@ impl ClientBuilder {
         self
     }
 
+    /// Set the maximum number of retries for failed requests
+    pub fn max_retries(mut self, max_retries: u32) -> Self {
+        self.max_retries = Some(max_retries);
+        self
+    }
+
+    /// Set the base delay between retries
+    pub fn retry_delay(mut self, retry_delay: Duration) -> Self {
+        self.retry_delay = Some(retry_delay);
+        self
+    }
+
     /// Build the client
     pub fn build(self) -> Result<Client> {
         let api_key = self.api_key.ok_or_else(|| GrokError::InvalidConfig("API key is required".to_string()))?;
@@ -320,6 +364,8 @@ impl ClientBuilder {
             timeout: self.timeout,
             user_agent: self.user_agent,
             request_id: self.request_id,
+            max_retries: self.max_retries.unwrap_or(3),
+            retry_delay: self.retry_delay.unwrap_or(Duration::from_millis(1000)),
         })
     }
 }

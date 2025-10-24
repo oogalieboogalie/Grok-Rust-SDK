@@ -23,6 +23,7 @@ cargo run --example collections
 cargo run --example client_builder
 cargo run --example streaming
 cargo run --example persistence
+cargo run --example retry
 ```
 
 ## Examples Overview
@@ -47,6 +48,9 @@ Streaming chat completions for real-time responses.
 
 ### `persistence.rs`
 Persistent storage of sessions and collections using SQLite.
+
+### `retry.rs`
+Automatic retry logic with exponential backoff for rate limits and errors.
 
 ### `client_builder.rs`
 Advanced client configuration using the builder pattern for timeouts, user agents, and request IDs.
