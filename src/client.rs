@@ -1,9 +1,9 @@
 //! Main client for interacting with the Grok API
 
 use crate::chat::{ChatCompletion, ChatRequest, ChatResponse, Message, Model, Tool};
+use crate::collections::CollectionManager;
 use crate::error::{GrokError, Result};
 use crate::session::SessionManager;
-use crate::collections::CollectionManager;
 use reqwest::{Client as HttpClient, Response};
 use serde::de::DeserializeOwned;
 use std::sync::Arc;
@@ -41,7 +41,10 @@ impl Client {
     }
 
     /// Create a collection manager for this client
-    pub fn collection_manager(&self, session_manager: Arc<SessionManager>) -> Arc<CollectionManager> {
+    pub fn collection_manager(
+        &self,
+        session_manager: Arc<SessionManager>,
+    ) -> Arc<CollectionManager> {
         Arc::new(CollectionManager::new(session_manager))
     }
 
@@ -78,7 +81,10 @@ impl Client {
 
         let response: ChatResponse = self.post("/chat/completions", &request).await?;
 
-        let choice = response.choices.into_iter().next()
+        let choice = response
+            .choices
+            .into_iter()
+            .next()
             .ok_or_else(|| GrokError::Api {
                 status: 500,
                 message: "No choices returned".to_string(),
@@ -115,7 +121,8 @@ impl Client {
             stream: Some(true),
         };
 
-        let response = self.http_client
+        let response = self
+            .http_client
             .post(&format!("{}/chat/completions", self.base_url))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
@@ -129,7 +136,8 @@ impl Client {
             return Err(GrokError::Api { status, message });
         }
 
-        let stream = response.bytes_stream()
+        let stream = response
+            .bytes_stream()
             .map(|result| match result {
                 Ok(bytes) => {
                     // Parse SSE format
@@ -166,9 +174,14 @@ impl Client {
     }
 
     /// Make a POST request to the API
-    async fn post<T: serde::Serialize, R: DeserializeOwned>(&self, endpoint: &str, body: &T) -> Result<R> {
+    async fn post<T: serde::Serialize, R: DeserializeOwned>(
+        &self,
+        endpoint: &str,
+        body: &T,
+    ) -> Result<R> {
         let url = format!("{}{}", self.base_url, endpoint);
-        let response = self.http_client
+        let response = self
+            .http_client
             .post(&url)
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")

@@ -30,12 +30,12 @@
 //! }
 //! ```
 
-pub mod client;
 pub mod chat;
-pub mod tools;
-pub mod session;
+pub mod client;
 pub mod collections;
 pub mod error;
+pub mod session;
+pub mod tools;
 
 pub use client::Client;
 pub use error::{GrokError, Result};

@@ -2,10 +2,10 @@
 
 #[cfg(test)]
 mod tests {
-    use grok_rust_sdk::chat::{Message, Role, Model};
-    use grok_rust_sdk::tools::{ToolRegistry, ToolExecutor, ToolSpec};
-    use grok_rust_sdk::error::GrokError;
     use async_trait::async_trait;
+    use grok_rust_sdk::chat::{Message, Model, Role};
+    use grok_rust_sdk::error::GrokError;
+    use grok_rust_sdk::tools::{ToolExecutor, ToolRegistry, ToolSpec};
     use serde_json;
 
     #[derive(Debug)]

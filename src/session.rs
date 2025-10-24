@@ -98,7 +98,11 @@ impl Session {
         self.append(user_message).await?;
 
         let messages = self.messages.read().await.clone();
-        let tools = if self.tools.is_empty() { None } else { Some(self.tools.clone()) };
+        let tools = if self.tools.is_empty() {
+            None
+        } else {
+            Some(self.tools.clone())
+        };
 
         let response = self.client.chat(self.model, messages, tools).await?;
 
@@ -109,7 +113,11 @@ impl Session {
     }
 
     /// Execute tool calls and continue the conversation
-    pub async fn execute_tools(&self, tool_calls: &[crate::chat::ToolCall], tool_registry: &crate::tools::ToolRegistry) -> Result<()> {
+    pub async fn execute_tools(
+        &self,
+        tool_calls: &[crate::chat::ToolCall],
+        tool_registry: &crate::tools::ToolRegistry,
+    ) -> Result<()> {
         for tool_call in tool_calls {
             let result = tool_registry.execute_tool_call(tool_call).await?;
 
@@ -140,7 +148,8 @@ impl Session {
     /// Clear the conversation history (keep system messages)
     pub async fn clear_history(&self) -> Result<()> {
         let mut messages = self.messages.write().await;
-        let system_messages: Vec<Message> = messages.drain(..)
+        let system_messages: Vec<Message> = messages
+            .drain(..)
             .filter(|msg| matches!(msg.role, crate::chat::Role::System))
             .collect();
         *messages = system_messages;
@@ -201,7 +210,8 @@ impl SessionManager {
     /// Delete a session
     pub async fn delete_session(&self, session_id: &str) -> Result<()> {
         let mut sessions = self.sessions.write().await;
-        sessions.remove(session_id)
+        sessions
+            .remove(session_id)
             .ok_or_else(|| GrokError::Session(format!("Session '{}' not found", session_id)))?;
         Ok(())
     }
@@ -210,12 +220,8 @@ impl SessionManager {
     pub async fn stats(&self) -> SessionStats {
         let sessions = self.sessions.read().await;
         let total_sessions = sessions.len();
-        let total_messages = sessions.values()
-            .map(|s| s.metadata.message_count)
-            .sum();
-        let total_tokens = sessions.values()
-            .map(|s| s.metadata.total_tokens)
-            .sum();
+        let total_messages = sessions.values().map(|s| s.metadata.message_count).sum();
+        let total_tokens = sessions.values().map(|s| s.metadata.total_tokens).sum();
 
         SessionStats {
             total_sessions,

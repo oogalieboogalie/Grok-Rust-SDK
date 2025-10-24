@@ -1,12 +1,12 @@
 //! Collections example for the Grok Rust SDK
 
-use grok_rust_sdk::{Client, chat::Model, session::SessionManager, collections::CollectionManager};
+use grok_rust_sdk::{chat::Model, collections::CollectionManager, session::SessionManager, Client};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load API key from environment
-    let api_key = std::env::var("XAI_API_KEY")
-        .expect("XAI_API_KEY environment variable must be set");
+    let api_key =
+        std::env::var("XAI_API_KEY").expect("XAI_API_KEY environment variable must be set");
 
     // Create client and managers
     let client = Client::new(api_key)?;
@@ -16,47 +16,75 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Collection Manager created");
 
     // Create collections
-    let coding_collection = collection_mgr.create_collection(
-        "Coding Discussions",
-        Some("Conversations about programming and development"),
-        vec!["coding".to_string(), "programming".to_string(), "tech".to_string()]
-    ).await;
+    let coding_collection = collection_mgr
+        .create_collection(
+            "Coding Discussions",
+            Some("Conversations about programming and development"),
+            vec![
+                "coding".to_string(),
+                "programming".to_string(),
+                "tech".to_string(),
+            ],
+        )
+        .await;
 
-    let ai_collection = collection_mgr.create_collection(
-        "AI Conversations",
-        Some("Discussions about artificial intelligence"),
-        vec!["ai".to_string(), "machine-learning".to_string(), "tech".to_string()]
-    ).await;
+    let ai_collection = collection_mgr
+        .create_collection(
+            "AI Conversations",
+            Some("Discussions about artificial intelligence"),
+            vec![
+                "ai".to_string(),
+                "machine-learning".to_string(),
+                "tech".to_string(),
+            ],
+        )
+        .await;
 
     println!("Created collections:");
-    println!("- {}: {}", coding_collection.id, coding_collection.metadata.name);
+    println!(
+        "- {}: {}",
+        coding_collection.id, coding_collection.metadata.name
+    );
     println!("- {}: {}", ai_collection.id, ai_collection.metadata.name);
 
     // Create sessions and add to collections
-    let rust_session = session_mgr.create_session(
-        Model::Grok4FastReasoning,
-        Some("Rust Programming Tips".to_string())
-    ).await;
+    let rust_session = session_mgr
+        .create_session(
+            Model::Grok4FastReasoning,
+            Some("Rust Programming Tips".to_string()),
+        )
+        .await;
 
-    let python_session = session_mgr.create_session(
-        Model::Grok4,
-        Some("Python Best Practices".to_string())
-    ).await;
+    let python_session = session_mgr
+        .create_session(Model::Grok4, Some("Python Best Practices".to_string()))
+        .await;
 
-    let ai_ethics_session = session_mgr.create_session(
-        Model::Grok4FastReasoning,
-        Some("AI Ethics Discussion".to_string())
-    ).await;
+    let ai_ethics_session = session_mgr
+        .create_session(
+            Model::Grok4FastReasoning,
+            Some("AI Ethics Discussion".to_string()),
+        )
+        .await;
 
     // Add some content to sessions
-    let _ = rust_session.chat("What are some advanced Rust features?").await?;
-    let _ = rust_session.chat("Tell me about async programming in Rust.").await?;
+    let _ = rust_session
+        .chat("What are some advanced Rust features?")
+        .await?;
+    let _ = rust_session
+        .chat("Tell me about async programming in Rust.")
+        .await?;
 
     let _ = python_session.chat("How does Python's GIL work?").await?;
-    let _ = python_session.chat("What's the difference between list and tuple?").await?;
+    let _ = python_session
+        .chat("What's the difference between list and tuple?")
+        .await?;
 
-    let _ = ai_ethics_session.chat("What are the main ethical concerns with AI?").await?;
-    let _ = ai_ethics_session.chat("How can we ensure AI safety?").await?;
+    let _ = ai_ethics_session
+        .chat("What are the main ethical concerns with AI?")
+        .await?;
+    let _ = ai_ethics_session
+        .chat("How can we ensure AI safety?")
+        .await?;
 
     // Add sessions to collections
     coding_collection.add_session(rust_session).await?;
@@ -98,10 +126,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n--- Sessions in Coding Collection ---");
     let coding_sessions = coding_collection.list_sessions().await;
     for session in coding_sessions {
-        println!("- {}: {:?} ({} messages)",
-                 session.id,
-                 session.metadata.title,
-                 session.metadata.message_count);
+        println!(
+            "- {}: {:?} ({} messages)",
+            session.id, session.metadata.title, session.metadata.message_count
+        );
     }
 
     Ok(())

@@ -75,8 +75,9 @@ impl Collection {
     /// Remove a session from the collection
     pub async fn remove_session(&self, session_id: &str) -> Result<()> {
         let mut sessions = self.sessions.write().await;
-        sessions.remove(session_id)
-            .ok_or_else(|| GrokError::Collection(format!("Session '{}' not in collection", session_id)))?;
+        sessions.remove(session_id).ok_or_else(|| {
+            GrokError::Collection(format!("Session '{}' not in collection", session_id))
+        })?;
         drop(sessions);
 
         self.update_metadata().await;
@@ -99,12 +100,8 @@ impl Collection {
     async fn update_metadata(&self) {
         let sessions = self.sessions.read().await;
         let session_count = sessions.len();
-        let total_messages = sessions.values()
-            .map(|s| s.metadata.message_count)
-            .sum();
-        let total_tokens = sessions.values()
-            .map(|s| s.metadata.total_tokens)
-            .sum();
+        let total_messages = sessions.values().map(|s| s.metadata.message_count).sum();
+        let total_tokens = sessions.values().map(|s| s.metadata.total_tokens).sum();
 
         let mut metadata = &mut self.metadata;
         metadata.session_count = session_count;
@@ -116,7 +113,8 @@ impl Collection {
     /// Search sessions by title or content
     pub async fn search_sessions(&self, query: &str) -> Vec<Arc<Session>> {
         let sessions = self.sessions.read().await;
-        sessions.values()
+        sessions
+            .values()
             .filter(|session| {
                 // Search in title
                 if let Some(title) = &session.metadata.title {
@@ -151,7 +149,12 @@ impl CollectionManager {
     }
 
     /// Create a new collection
-    pub async fn create_collection(&self, name: impl Into<String>, description: Option<String>, tags: Vec<String>) -> Arc<Collection> {
+    pub async fn create_collection(
+        &self,
+        name: impl Into<String>,
+        description: Option<String>,
+        tags: Vec<String>,
+    ) -> Arc<Collection> {
         let collection = Arc::new(Collection::new(name, description, tags));
         let collection_id = collection.id.clone();
 
@@ -176,8 +179,9 @@ impl CollectionManager {
     /// Delete a collection
     pub async fn delete_collection(&self, collection_id: &str) -> Result<()> {
         let mut collections = self.collections.write().await;
-        collections.remove(collection_id)
-            .ok_or_else(|| GrokError::Collection(format!("Collection '{}' not found", collection_id)))?;
+        collections.remove(collection_id).ok_or_else(|| {
+            GrokError::Collection(format!("Collection '{}' not found", collection_id))
+        })?;
         Ok(())
     }
 
@@ -186,10 +190,16 @@ impl CollectionManager {
         let collections = self.collections.read().await;
         let query_lower = query.to_lowercase();
 
-        collections.values()
+        collections
+            .values()
             .filter(|collection| {
                 // Search in name
-                if collection.metadata.name.to_lowercase().contains(&query_lower) {
+                if collection
+                    .metadata
+                    .name
+                    .to_lowercase()
+                    .contains(&query_lower)
+                {
                     return true;
                 }
 
@@ -201,7 +211,10 @@ impl CollectionManager {
                 }
 
                 // Search in tags
-                collection.metadata.tags.iter()
+                collection
+                    .metadata
+                    .tags
+                    .iter()
                     .any(|tag| tag.to_lowercase().contains(&query_lower))
             })
             .cloned()
@@ -211,7 +224,8 @@ impl CollectionManager {
     /// Get collections by tag
     pub async fn collections_by_tag(&self, tag: &str) -> Vec<Arc<Collection>> {
         let collections = self.collections.read().await;
-        collections.values()
+        collections
+            .values()
             .filter(|collection| collection.metadata.tags.contains(&tag.to_string()))
             .cloned()
             .collect()
@@ -221,15 +235,12 @@ impl CollectionManager {
     pub async fn stats(&self) -> CollectionStats {
         let collections = self.collections.read().await;
         let total_collections = collections.len();
-        let total_sessions = collections.values()
-            .map(|c| c.metadata.session_count)
-            .sum();
-        let total_messages = collections.values()
+        let total_sessions = collections.values().map(|c| c.metadata.session_count).sum();
+        let total_messages = collections
+            .values()
             .map(|c| c.metadata.total_messages)
             .sum();
-        let total_tokens = collections.values()
-            .map(|c| c.metadata.total_tokens)
-            .sum();
+        let total_tokens = collections.values().map(|c| c.metadata.total_tokens).sum();
 
         CollectionStats {
             total_collections,

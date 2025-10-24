@@ -37,7 +37,11 @@ pub struct Tool {
 
 impl Tool {
     /// Create a new tool definition
-    pub fn new(name: impl Into<String>, description: impl Into<String>, parameters: serde_json::Value) -> Self {
+    pub fn new(
+        name: impl Into<String>,
+        description: impl Into<String>,
+        parameters: serde_json::Value,
+    ) -> Self {
         Self {
             tool_type: "function".to_string(),
             function: ToolSpec {
@@ -103,21 +107,31 @@ impl ToolRegistry {
 
     /// Get all registered tools as API tool definitions
     pub fn api_tools(&self) -> Vec<Tool> {
-        self.tools.values().map(|executor| {
-            let spec = executor.spec();
-            Tool::new(spec.name.clone(), spec.description.clone(), spec.parameters.clone())
-        }).collect()
+        self.tools
+            .values()
+            .map(|executor| {
+                let spec = executor.spec();
+                Tool::new(
+                    spec.name.clone(),
+                    spec.description.clone(),
+                    spec.parameters.clone(),
+                )
+            })
+            .collect()
     }
 
     /// Execute a tool call
     pub async fn execute_tool_call(&self, tool_call: &ToolCall) -> Result<ToolResult> {
-        let executor = self.get(&tool_call.function.name)
-            .ok_or_else(|| GrokError::ToolExecution(format!("Tool '{}' not found", tool_call.function.name)))?;
+        let executor = self.get(&tool_call.function.name).ok_or_else(|| {
+            GrokError::ToolExecution(format!("Tool '{}' not found", tool_call.function.name))
+        })?;
 
         let args: serde_json::Value = serde_json::from_str(&tool_call.function.arguments)
             .map_err(|e| GrokError::ToolExecution(format!("Invalid tool arguments: {}", e)))?;
 
-        let result = executor.execute(args).await
+        let result = executor
+            .execute(args)
+            .await
             .map_err(|e| GrokError::ToolExecution(format!("Tool execution failed: {}", e)))?;
 
         let content = serde_json::to_string(&result)

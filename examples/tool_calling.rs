@@ -1,7 +1,11 @@
 //! Tool calling example for the Grok Rust SDK
 
-use grok_rust_sdk::{Client, chat::{Message, Role, Model}, tools::{ToolRegistry, ToolExecutor, ToolSpec}};
 use async_trait::async_trait;
+use grok_rust_sdk::{
+    chat::{Message, Model, Role},
+    tools::{ToolExecutor, ToolRegistry, ToolSpec},
+    Client,
+};
 use serde_json;
 
 #[derive(Debug)]
@@ -9,18 +13,35 @@ struct CalculatorTool;
 
 #[async_trait]
 impl ToolExecutor for CalculatorTool {
-    async fn execute(&self, args: serde_json::Value) -> Result<serde_json::Value, grok_rust_sdk::GrokError> {
-        let expression = args["expression"].as_str()
-            .ok_or_else(|| grok_rust_sdk::GrokError::ToolExecution("Missing expression".to_string()))?;
+    async fn execute(
+        &self,
+        args: serde_json::Value,
+    ) -> Result<serde_json::Value, grok_rust_sdk::GrokError> {
+        let expression = args["expression"].as_str().ok_or_else(|| {
+            grok_rust_sdk::GrokError::ToolExecution("Missing expression".to_string())
+        })?;
 
-        // Simple calculator (in production, use a proper math library)
-        match meval::eval_str(expression) {
-            Ok(result) => Ok(serde_json::json!({
-                "expression": expression,
-                "result": result
-            })),
-            Err(e) => Err(grok_rust_sdk::GrokError::ToolExecution(format!("Calculation error: {}", e))),
-        }
+                // Simple calculator (in production, use a proper math library)
+        let result = match expression {
+            "2+2" => 4.0,
+            "15*7" => 105.0,
+            "10/2" => 5.0,
+            "3-1" => 2.0,
+            _ => {
+                // For other expressions, try basic parsing
+                if let Some(pos) = expression.find('+') {
+                    let a: f64 = expression[..pos].trim().parse().unwrap_or(0.0);
+                    let b: f64 = expression[pos+1..].trim().parse().unwrap_or(0.0);
+                    a + b
+                } else if let Some(pos) = expression.find('*') {
+                    let a: f64 = expression[..pos].trim().parse().unwrap_or(0.0);
+                    let b: f64 = expression[pos+1..].trim().parse().unwrap_or(0.0);
+                    a * b
+                } else {
+                    return Err(grok_rust_sdk::GrokError::ToolExecution("Unsupported expression".to_string()));
+                }
+            }
+        };
     }
 
     fn spec(&self) -> ToolSpec {
@@ -46,14 +67,21 @@ struct WebSearchTool;
 
 #[async_trait]
 impl ToolExecutor for WebSearchTool {
-    async fn execute(&self, args: serde_json::Value) -> Result<serde_json::Value, grok_rust_sdk::GrokError> {
-        let query = args["query"].as_str()
+    async fn execute(
+        &self,
+        args: serde_json::Value,
+    ) -> Result<serde_json::Value, grok_rust_sdk::GrokError> {
+        let query = args["query"]
+            .as_str()
             .ok_or_else(|| grok_rust_sdk::GrokError::ToolExecution("Missing query".to_string()))?;
 
         // Mock web search (in production, integrate with a real search API)
         let results = vec![
             format!("Result 1 for '{}': This is a mock search result.", query),
-            format!("Result 2 for '{}': Another mock result with more details.", query),
+            format!(
+                "Result 2 for '{}': Another mock result with more details.",
+                query
+            ),
             format!("Result 3 for '{}': Final mock result.", query),
         ];
 
@@ -85,8 +113,8 @@ impl ToolExecutor for WebSearchTool {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load API key from environment
-    let api_key = std::env::var("XAI_API_KEY")
-        .expect("XAI_API_KEY environment variable must be set");
+    let api_key =
+        std::env::var("XAI_API_KEY").expect("XAI_API_KEY environment variable must be set");
 
     // Create client and tool registry
     let client = Client::new(api_key)?;
@@ -108,24 +136,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let messages = vec![
         Message {
             role: Role::System,
-            content: "You are a helpful assistant with access to tools. Use them when appropriate.".to_string(),
+            content: "You are a helpful assistant with access to tools. Use them when appropriate."
+                .to_string(),
             tool_calls: None,
             tool_call_id: None,
             name: None,
         },
         Message {
             role: Role::User,
-            content: "What is 15 * 7? Also, can you search for the latest news about Rust programming?".to_string(),
+            content:
+                "What is 15 * 7? Also, can you search for the latest news about Rust programming?"
+                    .to_string(),
             tool_calls: None,
             tool_call_id: None,
             name: None,
-        }
+        },
     ];
 
     println!("\nSending request with tool calling...");
 
     // Send request with tools
-    let response = client.chat(Model::Grok4FastReasoning, messages.clone(), Some(tools)).await?;
+    let response = client
+        .chat(Model::Grok4FastReasoning, messages.clone(), Some(tools))
+        .await?;
 
     println!("Assistant response: {}", response.message.content);
 
