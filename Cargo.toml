@@ -4,7 +4,10 @@ version = "0.1.0"
 edition = "2021"
 description = "Rust SDK for xAI's Grok API - supporting chat, tools, sessions, and collections"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/oogalieboogalie/Project-Homebase"
+repository = "https://github.com/oogalieboogalie/Grok-Rust-SDK"
+homepage = "https://github.com/oogalieboogalie/Grok-Rust-SDK"
+documentation = "https://docs.rs/grok-rust-sdk"
+readme = "README.md"
 keywords = ["grok", "xai", "ai", "chat", "tools", "sdk"]
 categories = ["api-bindings", "asynchronous"]
 
