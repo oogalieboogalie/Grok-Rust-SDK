@@ -1,0 +1,25 @@
+[package]
+name = "grok-rust-sdk"
+version = "0.1.0"
+edition = "2021"
+description = "Rust SDK for xAI's Grok API - supporting chat, tools, sessions, and collections"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/oogalieboogalie/Project-Homebase"
+keywords = ["grok", "xai", "ai", "chat", "tools", "sdk"]
+categories = ["api-bindings", "asynchronous"]
+
+[dependencies]
+reqwest = { version = "0.12", features = ["json", "stream"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.0", features = ["full"] }
+thiserror = "1.0"
+async-trait = "0.1"
+uuid = { version = "1.0", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+futures = "0.3"
+
+[dev-dependencies]
+tokio-test = "0.4"
+dotenv = "0.15"
+meval = "0.2"
