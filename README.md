@@ -7,6 +7,8 @@
 
 A Rust SDK for xAI's Grok API with chat completions, tool calling, and session management.
 
+**Made by Grok For Grok! "GROK ON!"** 🚀🤖
+
 ## ✨ Features
 
 - **Chat API** - Support for all Grok models
