@@ -145,9 +145,6 @@ let client = Client::builder()
 let response = client.chat(model, messages, tools).await?;
 ```
 
-## �🛠️ Tool Calling
-```
-
 ## 📦 Installation
 
 ```toml

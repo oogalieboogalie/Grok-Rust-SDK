@@ -1,9 +1,9 @@
 //! Persistence layer for storing sessions and collections in SQLite
 
+use crate::collections::CollectionManager;
 use crate::error::{GrokError, Result};
 use crate::session::{Session, SessionManager};
-use crate::collections::CollectionManager;
-use rusqlite::{Connection, params, OptionalExtension};
+use rusqlite::{params, Connection, OptionalExtension};
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -17,7 +17,8 @@ pub struct SqliteStorage {
 impl SqliteStorage {
     /// Create a new SQLite storage instance
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let conn = Connection::open(path).map_err(|e| GrokError::Session(format!("Failed to open database: {}", e)))?;
+        let conn = Connection::open(path)
+            .map_err(|e| GrokError::Session(format!("Failed to open database: {}", e)))?;
 
         // Create tables
         conn.execute(
@@ -28,7 +29,8 @@ impl SqliteStorage {
                 messages TEXT NOT NULL
             )",
             [],
-        ).map_err(|e| GrokError::Session(format!("Failed to create sessions table: {}", e)))?;
+        )
+        .map_err(|e| GrokError::Session(format!("Failed to create sessions table: {}", e)))?;
 
         conn.execute(
             "CREATE TABLE IF NOT EXISTS collections (
@@ -38,7 +40,8 @@ impl SqliteStorage {
                 created_at TEXT NOT NULL
             )",
             [],
-        ).map_err(|e| GrokError::Collection(format!("Failed to create collections table: {}", e)))?;
+        )
+        .map_err(|e| GrokError::Collection(format!("Failed to create collections table: {}", e)))?;
 
         conn.execute(
             "CREATE TABLE IF NOT EXISTS collection_sessions (
@@ -50,7 +53,10 @@ impl SqliteStorage {
                 FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
             )",
             [],
-        ).map_err(|e| GrokError::Collection(format!("Failed to create collection_sessions table: {}", e)))?;
+        )
+        .map_err(|e| {
+            GrokError::Collection(format!("Failed to create collection_sessions table: {}", e))
+        })?;
 
         Ok(Self {
             conn: Arc::new(RwLock::new(conn)),
@@ -59,7 +65,9 @@ impl SqliteStorage {
 
     /// Create an in-memory SQLite storage (for testing)
     pub fn in_memory() -> Result<Self> {
-        let conn = Connection::open_in_memory().map_err(|e| GrokError::Session(format!("Failed to create in-memory database: {}", e)))?;
+        let conn = Connection::open_in_memory().map_err(|e| {
+            GrokError::Session(format!("Failed to create in-memory database: {}", e))
+        })?;
 
         // Create tables (same as above)
         conn.execute(
@@ -70,7 +78,8 @@ impl SqliteStorage {
                 messages TEXT NOT NULL
             )",
             [],
-        ).map_err(|e| GrokError::Session(format!("Failed to create sessions table: {}", e)))?;
+        )
+        .map_err(|e| GrokError::Session(format!("Failed to create sessions table: {}", e)))?;
 
         conn.execute(
             "CREATE TABLE collections (
@@ -80,7 +89,8 @@ impl SqliteStorage {
                 created_at TEXT NOT NULL
             )",
             [],
-        ).map_err(|e| GrokError::Collection(format!("Failed to create collections table: {}", e)))?;
+        )
+        .map_err(|e| GrokError::Collection(format!("Failed to create collections table: {}", e)))?;
 
         conn.execute(
             "CREATE TABLE collection_sessions (
@@ -92,7 +102,10 @@ impl SqliteStorage {
                 FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
             )",
             [],
-        ).map_err(|e| GrokError::Collection(format!("Failed to create collection_sessions table: {}", e)))?;
+        )
+        .map_err(|e| {
+            GrokError::Collection(format!("Failed to create collection_sessions table: {}", e))
+        })?;
 
         Ok(Self {
             conn: Arc::new(RwLock::new(conn)),
@@ -121,34 +134,55 @@ impl SqliteStorage {
     /// Load a session from storage
     pub async fn load_session(&self, session_id: &str) -> Result<Option<Session>> {
         let conn = self.conn.read().await;
-        let result = conn.query_row(
-            "SELECT id, model, created_at, messages FROM sessions WHERE id = ?1",
-            params![session_id],
-            |row| {
-                let id: String = row.get(0)?;
-                let model_str: String = row.get(1)?;
-                let created_at_str: String = row.get(2)?;
-                let messages_json: String = row.get(3)?;
+        let result = conn
+            .query_row(
+                "SELECT id, model, created_at, messages FROM sessions WHERE id = ?1",
+                params![session_id],
+                |row| {
+                    let id: String = row.get(0)?;
+                    let model_str: String = row.get(1)?;
+                    let created_at_str: String = row.get(2)?;
+                    let messages_json: String = row.get(3)?;
 
-                let model = match model_str.as_str() {
-                    "grok-4-fast-reasoning" => crate::Model::Grok4FastReasoning,
-                    "grok-4" => crate::Model::Grok4,
-                    "grok-3" => crate::Model::Grok3,
-                    "grok-2" => crate::Model::Grok2,
-                    "grok-1" => crate::Model::Grok1,
-                    _ => return Err(rusqlite::Error::InvalidColumnType(1, "model".to_string(), rusqlite::types::Type::Text)),
-                };
+                    let model = match model_str.as_str() {
+                        "grok-4-fast-reasoning" => crate::Model::Grok4FastReasoning,
+                        "grok-4" => crate::Model::Grok4,
+                        "grok-3" => crate::Model::Grok3,
+                        "grok-2" => crate::Model::Grok2,
+                        "grok-1" => crate::Model::Grok1,
+                        _ => {
+                            return Err(rusqlite::Error::InvalidColumnType(
+                                1,
+                                "model".to_string(),
+                                rusqlite::types::Type::Text,
+                            ))
+                        }
+                    };
 
-                let created_at = chrono::DateTime::parse_from_rfc3339(&created_at_str)
-                    .map_err(|_| rusqlite::Error::InvalidColumnType(2, "created_at".to_string(), rusqlite::types::Type::Text))?
-                    .with_timezone(&chrono::Utc);
+                    let created_at = chrono::DateTime::parse_from_rfc3339(&created_at_str)
+                        .map_err(|_| {
+                            rusqlite::Error::InvalidColumnType(
+                                2,
+                                "created_at".to_string(),
+                                rusqlite::types::Type::Text,
+                            )
+                        })?
+                        .with_timezone(&chrono::Utc);
 
-                let messages: Vec<crate::chat::Message> = serde_json::from_str(&messages_json)
-                    .map_err(|_| rusqlite::Error::InvalidColumnType(3, "messages".to_string(), rusqlite::types::Type::Text))?;
+                    let messages: Vec<crate::chat::Message> = serde_json::from_str(&messages_json)
+                        .map_err(|_| {
+                            rusqlite::Error::InvalidColumnType(
+                                3,
+                                "messages".to_string(),
+                                rusqlite::types::Type::Text,
+                            )
+                        })?;
 
-                Ok(Session::restore(id, model, created_at, messages))
-            }
-        ).optional().map_err(|e| GrokError::Session(format!("Failed to load session: {}", e)))?;
+                    Ok(Session::restore(id, model, created_at, messages))
+                },
+            )
+            .optional()
+            .map_err(|e| GrokError::Session(format!("Failed to load session: {}", e)))?;
 
         Ok(result)
     }
@@ -156,10 +190,8 @@ impl SqliteStorage {
     /// Delete a session from storage
     pub async fn delete_session(&self, session_id: &str) -> Result<()> {
         let conn = self.conn.read().await;
-        conn.execute(
-            "DELETE FROM sessions WHERE id = ?1",
-            params![session_id],
-        ).map_err(|e| GrokError::Session(format!("Failed to delete session: {}", e)))?;
+        conn.execute("DELETE FROM sessions WHERE id = ?1", params![session_id])
+            .map_err(|e| GrokError::Session(format!("Failed to delete session: {}", e)))?;
 
         Ok(())
     }
@@ -167,10 +199,12 @@ impl SqliteStorage {
     /// List all session IDs
     pub async fn list_sessions(&self) -> Result<Vec<String>> {
         let conn = self.conn.read().await;
-        let mut stmt = conn.prepare("SELECT id FROM sessions ORDER BY created_at DESC")
+        let mut stmt = conn
+            .prepare("SELECT id FROM sessions ORDER BY created_at DESC")
             .map_err(|e| GrokError::Session(format!("Failed to prepare statement: {}", e)))?;
 
-        let ids = stmt.query_map([], |row| row.get(0))?
+        let ids = stmt
+            .query_map([], |row| row.get(0))?
             .collect::<std::result::Result<Vec<String>, _>>()
             .map_err(|e| GrokError::Session(format!("Failed to list sessions: {}", e)))?;
 
@@ -206,37 +240,58 @@ impl SqliteStorage {
     }
 
     /// Load a collection from storage
-    pub async fn load_collection(&self, collection_id: &str) -> Result<Option<crate::collections::Collection>> {
+    pub async fn load_collection(
+        &self,
+        collection_id: &str,
+    ) -> Result<Option<crate::collections::Collection>> {
         let conn = self.conn.read().await;
 
         // Load collection metadata
-        let collection_data = conn.query_row(
-            "SELECT id, name, description, created_at FROM collections WHERE id = ?1",
-            params![collection_id],
-            |row| {
-                let id: String = row.get(0)?;
-                let name: String = row.get(1)?;
-                let description: Option<String> = row.get(2)?;
-                let created_at_str: String = row.get(3)?;
+        let collection_data = conn
+            .query_row(
+                "SELECT id, name, description, created_at FROM collections WHERE id = ?1",
+                params![collection_id],
+                |row| {
+                    let id: String = row.get(0)?;
+                    let name: String = row.get(1)?;
+                    let description: Option<String> = row.get(2)?;
+                    let created_at_str: String = row.get(3)?;
 
-                let created_at = chrono::DateTime::parse_from_rfc3339(&created_at_str)
-                    .map_err(|_| rusqlite::Error::InvalidColumnType(3, "created_at".to_string(), rusqlite::types::Type::Text))?
-                    .with_timezone(&chrono::Utc);
+                    let created_at = chrono::DateTime::parse_from_rfc3339(&created_at_str)
+                        .map_err(|_| {
+                            rusqlite::Error::InvalidColumnType(
+                                3,
+                                "created_at".to_string(),
+                                rusqlite::types::Type::Text,
+                            )
+                        })?
+                        .with_timezone(&chrono::Utc);
 
-                Ok((id, name, description, created_at))
-            }
-        ).optional().map_err(|e| GrokError::Collection(format!("Failed to load collection: {}", e)))?;
+                    Ok((id, name, description, created_at))
+                },
+            )
+            .optional()
+            .map_err(|e| GrokError::Collection(format!("Failed to load collection: {}", e)))?;
 
         if let Some((id, name, description, created_at)) = collection_data {
             // Load associated session IDs
             let mut stmt = conn.prepare("SELECT session_id FROM collection_sessions WHERE collection_id = ?1 ORDER BY added_at")
                 .map_err(|e| GrokError::Collection(format!("Failed to prepare statement: {}", e)))?;
 
-            let session_ids = stmt.query_map(params![collection_id], |row| row.get(0))?
+            let session_ids = stmt
+                .query_map(params![collection_id], |row| row.get(0))?
                 .collect::<std::result::Result<Vec<String>, _>>()
-                .map_err(|e| GrokError::Collection(format!("Failed to load collection sessions: {}", e)))?;
+                .map_err(|e| {
+                    GrokError::Collection(format!("Failed to load collection sessions: {}", e))
+                })?;
 
-            let collection = crate::collections::Collection::restore(id, name, description, created_at, session_ids);
+            let collection = crate::collections::Collection::restore(
+                id,
+                name,
+                description,
+                created_at,
+                session_ids,
+            );
             Ok(Some(collection))
         } else {
             Ok(None)
@@ -249,7 +304,8 @@ impl SqliteStorage {
         conn.execute(
             "DELETE FROM collections WHERE id = ?1",
             params![collection_id],
-        ).map_err(|e| GrokError::Collection(format!("Failed to delete collection: {}", e)))?;
+        )
+        .map_err(|e| GrokError::Collection(format!("Failed to delete collection: {}", e)))?;
 
         Ok(())
     }
@@ -257,10 +313,12 @@ impl SqliteStorage {
     /// List all collection IDs
     pub async fn list_collections(&self) -> Result<Vec<String>> {
         let conn = self.conn.read().await;
-        let mut stmt = conn.prepare("SELECT id FROM collections ORDER BY created_at DESC")
+        let mut stmt = conn
+            .prepare("SELECT id FROM collections ORDER BY created_at DESC")
             .map_err(|e| GrokError::Collection(format!("Failed to prepare statement: {}", e)))?;
 
-        let ids = stmt.query_map([], |row| row.get(0))?
+        let ids = stmt
+            .query_map([], |row| row.get(0))?
             .collect::<std::result::Result<Vec<String>, _>>()
             .map_err(|e| GrokError::Collection(format!("Failed to list collections: {}", e)))?;
 
