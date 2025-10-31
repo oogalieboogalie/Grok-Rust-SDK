@@ -155,7 +155,7 @@ tokio = { version = "1.0", features = ["full"] }
 
 ## 🔧 Requirements
 
-- Rust 1.70+
+- Rust 1.75+
 - xAI API key from [x.ai](https://x.ai)
 
 ## 📚 Examples

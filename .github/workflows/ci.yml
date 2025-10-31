@@ -48,8 +48,8 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install Rust MSRV (1.70)
-      uses: dtolnay/rust-toolchain@1.70
+    - name: Install Rust MSRV (stable)
+      uses: dtolnay/rust-toolchain@stable
 
     - name: Cache dependencies
       uses: actions/cache@v4
