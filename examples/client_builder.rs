@@ -11,10 +11,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Advanced client creation with builder pattern
     let advanced_client = Client::builder()
         .api_key("your-api-key-here")
-        .base_url("https://api.x.ai/v1")  // Optional, defaults to this
-        .timeout(Duration::from_secs(30))  // Custom timeout
-        .user_agent("MyApp/1.0")  // Custom user agent
-        .request_id("req-12345")  // Custom request ID for tracing
+        .base_url("https://api.x.ai/v1") // Optional, defaults to this
+        .timeout(Duration::from_secs(30)) // Custom timeout
+        .user_agent("MyApp/1.0") // Custom user agent
+        .request_id("req-12345") // Custom request ID for tracing
         .build()?;
 
     println!("Client configured with:");

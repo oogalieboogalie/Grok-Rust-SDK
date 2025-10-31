@@ -1,4 +1,54 @@
-//! Chat completion functionality
+//! Chat completion types and message handling
+//!
+//! This module provides types and builders for working with chat completions,
+//! including messages, models, and streaming responses.
+//!
+//! # Key Types
+//!
+//! - [`Model`]: Enum representing available Grok models
+//! - [`Message`]: Chat messages with role and content
+//! - [`MessageBuilder`]: Builder for constructing complex messages
+//! - [`ChatCompletion`]: Complete chat response
+//! - [`ChatChunk`]: Streaming response chunk
+//!
+//! # Examples
+//!
+//! Creating messages:
+//!
+//! ```
+//! use grok_rust_sdk::chat::Message;
+//!
+//! let user_msg = Message::user("Hello!");
+//! let system_msg = Message::system("You are a helpful assistant");
+//! let assistant_msg = Message::assistant("Hello! How can I help?");
+//! ```
+//!
+//! Using the message builder:
+//!
+//! ```
+//! use grok_rust_sdk::chat::{Message, Role};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let msg = Message::builder()
+//!     .role(Role::User)
+//!     .content("Tell me a joke")
+//!     .build()?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! Parsing model names:
+//!
+//! ```
+//! use grok_rust_sdk::chat::Model;
+//! use std::str::FromStr;
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let model = Model::from_str("grok-4-fast-reasoning")?;
+//! assert_eq!(model, Model::Grok4FastReasoning);
+//! # Ok(())
+//! # }
+//! ```
 
 use crate::error::{GrokError, Result};
 use serde::{Deserialize, Serialize};
@@ -38,6 +88,24 @@ impl std::fmt::Display for Model {
     }
 }
 
+impl std::str::FromStr for Model {
+    type Err = GrokError;
+
+    fn from_str(s: &str) -> Result<Self> {
+        match s.to_lowercase().as_str() {
+            "grok-4-fast-reasoning" => Ok(Model::Grok4FastReasoning),
+            "grok-4" => Ok(Model::Grok4),
+            "grok-3" => Ok(Model::Grok3),
+            "grok-2" => Ok(Model::Grok2),
+            "grok-1" => Ok(Model::Grok1),
+            _ => Err(GrokError::InvalidConfig(format!(
+                "Unknown model: {}. Valid models are: grok-4-fast-reasoning, grok-4, grok-3, grok-2, grok-1",
+                s
+            ))),
+        }
+    }
+}
+
 /// Message roles in a conversation
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -68,6 +136,126 @@ pub struct Message {
     /// Optional name of the tool (for tool results)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+}
+
+impl Message {
+    /// Create a user message
+    pub fn user(content: impl Into<String>) -> Self {
+        Self {
+            role: Role::User,
+            content: content.into(),
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+        }
+    }
+
+    /// Create a system message
+    pub fn system(content: impl Into<String>) -> Self {
+        Self {
+            role: Role::System,
+            content: content.into(),
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+        }
+    }
+
+    /// Create an assistant message
+    pub fn assistant(content: impl Into<String>) -> Self {
+        Self {
+            role: Role::Assistant,
+            content: content.into(),
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+        }
+    }
+
+    /// Create a tool result message
+    pub fn tool(
+        content: impl Into<String>,
+        tool_call_id: impl Into<String>,
+        name: impl Into<String>,
+    ) -> Self {
+        Self {
+            role: Role::Tool,
+            content: content.into(),
+            tool_calls: None,
+            tool_call_id: Some(tool_call_id.into()),
+            name: Some(name.into()),
+        }
+    }
+
+    /// Create a builder for constructing messages with custom options
+    pub fn builder() -> MessageBuilder {
+        MessageBuilder::new()
+    }
+}
+
+/// Builder for creating messages with custom options
+#[derive(Debug, Default)]
+pub struct MessageBuilder {
+    role: Option<Role>,
+    content: Option<String>,
+    tool_calls: Option<Vec<ToolCall>>,
+    tool_call_id: Option<String>,
+    name: Option<String>,
+}
+
+impl MessageBuilder {
+    /// Create a new message builder
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the role
+    pub fn role(mut self, role: Role) -> Self {
+        self.role = Some(role);
+        self
+    }
+
+    /// Set the content
+    pub fn content(mut self, content: impl Into<String>) -> Self {
+        self.content = Some(content.into());
+        self
+    }
+
+    /// Set tool calls
+    pub fn tool_calls(mut self, tool_calls: Vec<ToolCall>) -> Self {
+        self.tool_calls = Some(tool_calls);
+        self
+    }
+
+    /// Set tool call ID
+    pub fn tool_call_id(mut self, tool_call_id: impl Into<String>) -> Self {
+        self.tool_call_id = Some(tool_call_id.into());
+        self
+    }
+
+    /// Set name
+    pub fn name(mut self, name: impl Into<String>) -> Self {
+        self.name = Some(name.into());
+        self
+    }
+
+    /// Build the message
+    pub fn build(self) -> Result<Message> {
+        let role = self
+            .role
+            .ok_or_else(|| GrokError::InvalidConfig("Message role is required".to_string()))?;
+        let content = self
+            .content
+            .ok_or_else(|| GrokError::InvalidConfig("Message content is required".to_string()))?;
+
+        Ok(Message {
+            role,
+            content,
+            tool_calls: self.tool_calls,
+            tool_call_id: self.tool_call_id,
+            name: self.name,
+        })
+    }
 }
 
 /// Tool call made by the assistant

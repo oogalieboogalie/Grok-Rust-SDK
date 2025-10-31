@@ -1,7 +1,7 @@
 //! Example demonstrating streaming chat completions
 
-use grok_rust_sdk::{Client, chat::Message};
 use futures::StreamExt;
+use grok_rust_sdk::{chat::Message, Client};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -9,10 +9,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::new("your-api-key-here")?;
 
     // Create messages
-    let messages = vec![Message::user("Tell me a short story about a robot learning to paint.")];
+    let messages = vec![Message::user(
+        "Tell me a short story about a robot learning to paint.",
+    )];
 
     // Stream the response
-    let mut stream = client.chat_stream(grok_rust_sdk::Model::Grok4FastReasoning, messages, None).await?;
+    let mut stream = client
+        .chat_stream(grok_rust_sdk::Model::Grok4FastReasoning, messages, None)
+        .await?;
 
     println!("🤖 Streaming response:");
     println!("---");
