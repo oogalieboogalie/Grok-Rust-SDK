@@ -1,6 +1,47 @@
-//! Main client for interacting with the Grok API
+//! HTTP client for interacting with the Grok API
+//!
+//! This module provides the main [`Client`] for making requests to xAI's Grok API.
+//! It includes:
+//!
+//! - **Retry Logic**: Automatic exponential backoff for rate limits and network errors
+//! - **Request Validation**: Parameter validation to catch errors before API calls
+//! - **API Key Validation**: Secure validation and sanitization of API keys
+//! - **Builder Pattern**: Flexible client configuration via [`ClientBuilder`]
+//! - **Streaming Support**: Real-time response streaming without loading full responses into memory
+//!
+//! # Examples
+//!
+//! Basic usage:
+//!
+//! ```no_run
+//! use grok_rust_sdk::{Client, Model, chat::Message};
+//!
+//! # #[tokio::main]
+//! # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let client = Client::new("your-api-key")?;
+//! let messages = vec![Message::user("Hello, Grok!")];
+//! let response = client.chat(Model::Grok4FastReasoning, messages, None).await?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! Advanced configuration:
+//!
+//! ```no_run
+//! use grok_rust_sdk::Client;
+//! use std::time::Duration;
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let client = Client::builder()
+//!     .api_key("your-api-key")
+//!     .timeout(Duration::from_secs(30))
+//!     .max_retries(5)
+//!     .build()?;
+//! # Ok(())
+//! # }
+//! ```
 
-use crate::chat::{ChatCompletion, ChatRequest, ChatResponse, Message, Model, Tool, ChatChunk};
+use crate::chat::{ChatChunk, ChatCompletion, ChatRequest, ChatResponse, Message, Model, Tool};
 use crate::collections::CollectionManager;
 use crate::error::{GrokError, Result};
 use crate::session::SessionManager;
@@ -24,10 +65,15 @@ pub struct Client {
 
 impl Client {
     /// Create a new client with an API key
+    ///
+    /// # Errors
+    ///
+    /// Returns `GrokError::InvalidApiKey` if the API key format is invalid.
     pub fn new(api_key: impl Into<String>) -> Result<Self> {
+        let api_key = Self::validate_api_key(api_key.into())?;
         Ok(Self {
             http_client: HttpClient::new(),
-            api_key: api_key.into(),
+            api_key,
             base_url: "https://api.x.ai/v1".to_string(),
             timeout: None,
             user_agent: None,
@@ -37,11 +83,108 @@ impl Client {
         })
     }
 
+    /// Validate chat options
+    fn validate_options(options: &ChatOptions) -> Result<()> {
+        // Validate max_tokens
+        if let Some(max_tokens) = options.max_tokens {
+            if max_tokens == 0 {
+                return Err(GrokError::InvalidConfig(
+                    "max_tokens must be greater than 0".to_string(),
+                ));
+            }
+            if max_tokens > 131_072 {
+                return Err(GrokError::InvalidConfig(
+                    "max_tokens cannot exceed 131,072 (128k tokens)".to_string(),
+                ));
+            }
+        }
+
+        // Validate temperature
+        if let Some(temperature) = options.temperature {
+            if !(0.0..=2.0).contains(&temperature) {
+                return Err(GrokError::InvalidConfig(
+                    "temperature must be between 0.0 and 2.0".to_string(),
+                ));
+            }
+        }
+
+        // Validate top_p
+        if let Some(top_p) = options.top_p {
+            if !(0.0..=1.0).contains(&top_p) {
+                return Err(GrokError::InvalidConfig(
+                    "top_p must be between 0.0 and 1.0".to_string(),
+                ));
+            }
+        }
+
+        // Validate stop sequences
+        if let Some(ref stop) = options.stop {
+            if stop.len() > 4 {
+                return Err(GrokError::InvalidConfig(
+                    "maximum of 4 stop sequences allowed".to_string(),
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Validate and sanitize an API key
+    fn validate_api_key(api_key: String) -> Result<String> {
+        // Trim whitespace
+        let api_key = api_key.trim().to_string();
+
+        // Check for empty key
+        if api_key.is_empty() {
+            return Err(GrokError::InvalidApiKey(
+                "API key cannot be empty".to_string(),
+            ));
+        }
+
+        // Check for suspiciously short keys (xAI keys should be reasonable length)
+        if api_key.len() < 10 {
+            return Err(GrokError::InvalidApiKey(
+                "API key appears to be too short".to_string(),
+            ));
+        }
+
+        // Check for placeholder or dummy values
+        let lowercase_key = api_key.to_lowercase();
+        if lowercase_key.contains("your-api-key")
+            || lowercase_key.contains("your-xai-api-key")
+            || lowercase_key.contains("replace-me")
+            || lowercase_key.contains("placeholder")
+            || lowercase_key == "test"
+            || lowercase_key == "dummy"
+        {
+            return Err(GrokError::InvalidApiKey(
+                "API key appears to be a placeholder value".to_string(),
+            ));
+        }
+
+        // Check for only alphanumeric and common API key characters
+        if !api_key
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.')
+        {
+            return Err(GrokError::InvalidApiKey(
+                "API key contains invalid characters".to_string(),
+            ));
+        }
+
+        Ok(api_key)
+    }
+
     /// Create a new client with custom configuration
+    ///
+    /// # Errors
+    ///
+    /// Returns `GrokError::InvalidApiKey` if the API key format is invalid.
     pub fn with_config(api_key: impl Into<String>, base_url: impl Into<String>) -> Result<Self> {
+        let api_key = Self::validate_api_key(api_key.into())?;
         Ok(Self {
             http_client: HttpClient::new(),
-            api_key: api_key.into(),
+            api_key,
             base_url: base_url.into(),
             timeout: None,
             user_agent: None,
@@ -80,6 +223,10 @@ impl Client {
     }
 
     /// Send a chat completion request with full options
+    ///
+    /// # Errors
+    ///
+    /// Returns `GrokError::InvalidConfig` if parameters are out of valid ranges.
     pub async fn chat_with_options(
         &self,
         model: Model,
@@ -87,6 +234,18 @@ impl Client {
         tools: Option<Vec<Tool>>,
         options: Option<ChatOptions>,
     ) -> Result<ChatCompletion> {
+        // Validate messages
+        if messages.is_empty() {
+            return Err(GrokError::InvalidConfig(
+                "At least one message is required".to_string(),
+            ));
+        }
+
+        // Validate options if provided
+        if let Some(ref opts) = options {
+            Self::validate_options(opts)?;
+        }
+
         let request = ChatRequest {
             model: model.as_str().to_string(),
             messages,
@@ -121,12 +280,16 @@ impl Client {
     }
 
     /// Stream a chat completion
+    ///
+    /// This method returns a stream of chunks as they arrive from the API,
+    /// enabling real-time response streaming without loading the entire response into memory.
     pub async fn chat_stream(
         &self,
         model: Model,
         messages: Vec<Message>,
         tools: Option<Vec<Tool>>,
     ) -> Result<impl futures::Stream<Item = Result<ChatChunk>>> {
+        use futures::stream::TryStreamExt;
         use futures::StreamExt;
 
         let request = ChatRequest {
@@ -160,26 +323,51 @@ impl Client {
             return Err(GrokError::Api { status, message });
         }
 
-        // Collect all response data
-        let body_bytes = response.bytes().await.map_err(GrokError::Http)?;
-        let body_text = String::from_utf8_lossy(&body_bytes);
+        // Create a stream that processes SSE events as they arrive
+        let byte_stream = response.bytes_stream();
 
-        // Parse SSE format and collect chunks
-        let mut chunks = Vec::new();
-        for line in body_text.lines() {
-            if line.starts_with("data: ") {
-                let data = &line[6..];
-                if data == "[DONE]" {
-                    break;
-                }
-                if let Ok(chunk) = serde_json::from_str::<ChatChunk>(data) {
-                    chunks.push(chunk);
-                }
-            }
-        }
+        // Use unfold to maintain state (buffer) across stream items
+        let stream = futures::stream::unfold(
+            (byte_stream, String::new()),
+            |(mut stream, mut buffer)| async move {
+                loop {
+                    match stream.next().await {
+                        Some(Ok(bytes)) => {
+                            // Append new bytes to buffer
+                            buffer.push_str(&String::from_utf8_lossy(&bytes));
 
-        // Convert to stream
-        let stream = futures::stream::iter(chunks.into_iter().map(Ok));
+                            // Check if we have a complete line
+                            if let Some(newline_pos) = buffer.rfind('\n') {
+                                // Split off the complete lines
+                                let complete = buffer[..=newline_pos].to_string();
+                                buffer = buffer[newline_pos + 1..].to_string();
+
+                                // Process complete lines and find first valid chunk
+                                for line in complete.lines() {
+                                    if line.starts_with("data: ") {
+                                        let data = &line[6..];
+                                        if data == "[DONE]" {
+                                            return None; // End of stream
+                                        }
+                                        if let Ok(chunk) = serde_json::from_str::<ChatChunk>(data) {
+                                            return Some((Ok(chunk), (stream, buffer)));
+                                        }
+                                    }
+                                }
+                                // No valid chunk in this batch, continue to next
+                                continue;
+                            }
+                            // No complete line yet, continue to next bytes
+                            continue;
+                        }
+                        Some(Err(e)) => {
+                            return Some((Err(GrokError::Http(e)), (stream, buffer)));
+                        }
+                        None => return None, // Stream ended
+                    }
+                }
+            },
+        );
 
         Ok(stream)
     }
@@ -341,9 +529,19 @@ impl ClientBuilder {
     }
 
     /// Build the client
+    ///
+    /// # Errors
+    ///
+    /// Returns `GrokError::InvalidConfig` if required configuration is missing,
+    /// or `GrokError::InvalidApiKey` if the API key format is invalid.
     pub fn build(self) -> Result<Client> {
-        let api_key = self.api_key.ok_or_else(|| GrokError::InvalidConfig("API key is required".to_string()))?;
-        let base_url = self.base_url.unwrap_or_else(|| "https://api.x.ai/v1".to_string());
+        let api_key = self
+            .api_key
+            .ok_or_else(|| GrokError::InvalidConfig("API key is required".to_string()))?;
+        let api_key = Client::validate_api_key(api_key)?;
+        let base_url = self
+            .base_url
+            .unwrap_or_else(|| "https://api.x.ai/v1".to_string());
 
         let mut http_client_builder = HttpClient::builder();
 

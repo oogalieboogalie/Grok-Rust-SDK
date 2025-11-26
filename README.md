@@ -145,9 +145,6 @@ let client = Client::builder()
 let response = client.chat(model, messages, tools).await?;
 ```
 
-## �🛠️ Tool Calling
-```
-
 ## 📦 Installation
 
 ```toml
@@ -158,7 +155,7 @@ tokio = { version = "1.0", features = ["full"] }
 
 ## 🔧 Requirements
 
-- Rust 1.70+
+- Rust 1.75+
 - xAI API key from [x.ai](https://x.ai)
 
 ## 📚 Examples

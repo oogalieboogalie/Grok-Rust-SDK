@@ -1,65 +1,72 @@
 //! Error types for the Grok SDK
+//!
+//! This module provides comprehensive error handling for the SDK using `thiserror`.
+//! All errors implement `std::error::Error` and provide detailed context.
 
-use std::fmt;
+use thiserror::Error;
 
 /// Result type alias for Grok operations
 pub type Result<T> = std::result::Result<T, GrokError>;
 
 /// Errors that can occur when using the Grok SDK
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum GrokError {
     /// HTTP request failed
-    Http(reqwest::Error),
+    #[error("HTTP request failed: {0}")]
+    Http(#[from] reqwest::Error),
+
     /// JSON serialization/deserialization failed
-    Json(serde_json::Error),
+    #[error("JSON processing failed: {0}")]
+    Json(#[from] serde_json::Error),
+
     /// API returned an error response
-    Api { status: u16, message: String },
+    #[error("API error (status {status}): {message}")]
+    Api {
+        /// HTTP status code
+        status: u16,
+        /// Error message from the API
+        message: String,
+    },
+
     /// Invalid configuration or parameters
+    #[error("Invalid configuration: {0}")]
     InvalidConfig(String),
+
     /// Authentication failed
+    #[error("Authentication failed: {0}")]
     Authentication(String),
+
     /// Rate limit exceeded
-    RateLimit { retry_after: Option<u64> },
+    #[error("Rate limit exceeded{}", match .retry_after {
+        Some(seconds) => format!(", retry after {} seconds", seconds),
+        None => String::new(),
+    })]
+    RateLimit {
+        /// Seconds until retry is allowed
+        retry_after: Option<u64>,
+    },
+
     /// Tool execution failed
+    #[error("Tool execution failed: {0}")]
     ToolExecution(String),
+
     /// Session operation failed
+    #[error("Session operation failed: {0}")]
     Session(String),
+
     /// Collection operation failed
+    #[error("Collection operation failed: {0}")]
     Collection(String),
-}
 
-impl fmt::Display for GrokError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            GrokError::Http(e) => write!(f, "HTTP error: {}", e),
-            GrokError::Json(e) => write!(f, "JSON error: {}", e),
-            GrokError::Api { status, message } => write!(f, "API error ({}): {}", status, message),
-            GrokError::InvalidConfig(msg) => write!(f, "Invalid config: {}", msg),
-            GrokError::Authentication(msg) => write!(f, "Authentication error: {}", msg),
-            GrokError::RateLimit { retry_after } => {
-                if let Some(seconds) = retry_after {
-                    write!(f, "Rate limit exceeded, retry after {} seconds", seconds)
-                } else {
-                    write!(f, "Rate limit exceeded")
-                }
-            }
-            GrokError::ToolExecution(msg) => write!(f, "Tool execution error: {}", msg),
-            GrokError::Session(msg) => write!(f, "Session error: {}", msg),
-            GrokError::Collection(msg) => write!(f, "Collection error: {}", msg),
-        }
-    }
-}
+    /// Database operation failed
+    #[error("Database error: {0}")]
+    Database(#[from] rusqlite::Error),
 
-impl std::error::Error for GrokError {}
+    /// JSON Schema validation failed
+    #[error("JSON Schema validation failed: {0}")]
+    SchemaValidation(String),
 
-impl From<reqwest::Error> for GrokError {
-    fn from(err: reqwest::Error) -> Self {
-        GrokError::Http(err)
-    }
-}
-
-impl From<serde_json::Error> for GrokError {
-    fn from(err: serde_json::Error) -> Self {
-        GrokError::Json(err)
-    }
+    /// Invalid API key format
+    #[error("Invalid API key: {0}")]
+    InvalidApiKey(String),
 }

@@ -23,3 +23,14 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+
+# Executables and binaries (prevent accidental commits)
+*.exe
+*.dll
+*.so
+*.dylib
+
+# SQLite databases (for testing)
+*.db
+*.db-shm
+*.db-wal
